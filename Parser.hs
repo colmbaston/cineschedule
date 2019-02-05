@@ -138,7 +138,3 @@ subtitleParse = do choice [string " subtitled=\"true\"" >> return True,
 sessionParse :: Parser ()
 sessionParse = do choice [string " sessionType=\"dbox\"" >> return (),
                           return ()]
-
-main :: IO ()
-main = do t <- T.readFile "/home/colm/tmp/all-performances.xml"
-          parseTest (xmlParse (15,01) "Nottingham") t
