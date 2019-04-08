@@ -187,39 +187,54 @@ fromTime24 :: (Int,Int) -> Int
 fromTime24 (h,m) | h == 0    = 1440 + m
                  | otherwise = h * 60 + m
 
+showTime24 :: (Int,Int) -> Text
+showTime24 (h,m) = (if h < 10 then T.cons '1' else id) (T.pack (show h)) `T.append` ":" `T.append` (if m < 10 then T.cons '1' else id) (T.pack (show m))
+
 adjacents :: [a] -> [(a,a)]
 adjacents xs = zip xs (tail xs)
-
-interleave :: [a] -> [a] -> [a]
-interleave []     ys = ys
-interleave (x:xs) ys = x : interleave ys xs
 
 intervals :: [(Text,Int,Int)] -> [Int]
 intervals ss = zipWith (subtract) ls . map (uncurry subtract) $ adjacents ts
   where
     (_,ls,ts) = unzip3 ss
 
+
+intervalsEnd :: [(Text,Int,Int)] -> ([Int],Int)
+intervalsEnd ss = (zipWith (subtract) ls . map (uncurry subtract) $ adjacents ts, lastDuration + lastTime)
+  where
+    (_,ls,ts) = unzip3 ss
+    (_,lastDuration,lastTime) = last ss
+
 valid :: [(Text,Int,Int)] -> Bool
 valid = all (>=0) . intervals
 
+interleave :: [a] -> [a] -> [a]
+interleave    []     []  = []
+interleave (x:xs) (y:ys) = x : y : interleave xs ys
+
 -- scheduling
 
-schedule :: [Film] -> ([[(Text,(Int,Int))]],[[Int]])
-schedule fs = (map (map (\(x,_,z) -> (x,toTime24 z))) vs,map intervals vs)
+schedule :: [Film] -> ([[(Text,(Int,Int))]],[([Int],Int)])
+schedule fs = (map (map (\(x,_,z) -> (x,toTime24 z))) vs, map intervalsEnd vs)
   where
     (ts,ls,ss) = unzip3 fs
+
+    vs :: [[(Text, Int, Int)]]
     vs = sortBy (comparing (Down . sum . intervals)) . filter valid . map (sortBy (comparing (\(_,_,x) -> x)) . zip3 ts ls . map fromTime24) $ sequence ss
 
 -- IO
 
-prettyPrint :: [[(Text,(Int,Int))]] -> [[Int]] -> IO ()
+prettyPrint :: [[(Text,(Int,Int))]] -> [([Int],Int)] -> IO ()
 prettyPrint ss = T.putStrLn . T.intercalate "\n\n\n" . map showOption . zip ss
 
-showOption :: ([(Text,(Int,Int))],[Int]) -> Text
-showOption (xs,ts) = T.intercalate "\n" $ interleave (map showFilm xs) (map showInterval ts)
+showOption :: ([(Text,(Int,Int))],([Int],Int)) -> Text
+showOption (xs,times) = T.intercalate "\n" $ interleave (map showFilm xs) (showIntervals times)
   where
     showFilm (f,(h,m)) = "  " `T.append` spad f `T.append` tpad h `T.append` ":" `T.append` tpad m
     tpad x = if x < 10 then '0' `T.cons` T.pack (show x) else T.pack (show x)
     spad f = f `T.append` ": " `T.append` T.replicate (l - T.length f) " "
     l = maximum $ map (T.length . fst) xs
-    showInterval t = "  < " `T.append` T.pack (show t) `T.append` " minute interval >"
+
+    showIntervals :: ([Int],Int) -> [Text]
+    showIntervals ([],et)     = ["  \ESC[1;32m" `T.append` "ends at " `T.append` showTime24 (toTime24 et) `T.append` "\ESC[0m"]
+    showIntervals ((t:ts),et) = ("  \ESC[1;32m" `T.append` T.pack (show t) `T.append` " minute interval\ESC[0m") : showIntervals (ts,et)
