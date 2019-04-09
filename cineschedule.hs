@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 import System.Environment
@@ -44,8 +45,6 @@ main = do hSetBuffering stdout NoBuffering
                  Nothing -> T.putStrLn ("No cinema option provided - defaulting to " `T.append` defaultCinema `T.append` "...") >> return defaultCinema
                  Just  c -> return c
 
-
-
           absDir <- (++ "/.cache") <$> getHomeDirectory
           b <- doesDirectoryExist absDir
           unless b (createDirectory absDir)
@@ -80,8 +79,6 @@ refresh f d c s = do putStrLn s
 download :: FilePath -> IO ()
 download f = callProcess "wget" ["-q","--show-progress","-O",f,url]
 
-type Film = (Text,Int,[(Int,Int)])
-
 filmHandler :: String -> (Int,Int) -> [Film] -> IO ()
 filmHandler c (d,m) fs = do let l  = length fs
                             let ll = zip [0..] (map (\(x,_,_) -> x) fs)
@@ -92,36 +89,27 @@ filmHandler c (d,m) fs = do let l  = length fs
                             putStrLn ""
                             putStr "Enter the values of the films that you wish to schedule (space separated, press 'q' to exit): "
                             ns <- fmap nubsort $ getNumbers l
-                            putStrLn ""
                             case schedule (select ns fs) of
-                              ([],_) -> putStrLn "No possible schedulings!"
-                              xs -> uncurry prettyPrint xs
-                            putStrLn ""
+                               [] -> putStrLn "No possible schedulings!"
+                               os -> do let (ns,_,_) = unzip3 (head os)
+                                        mapM_ (\x -> putChar '\n' >> printOption (maximum (map T.length ns)) x >> putChar '\n') os
+
   where
     up = unwords . map (\(x:xs) -> toUpper x : xs) . words
     dpad n    = (if n < 10 then ('0':) else id) (show n)
     lpad m xs = replicate (m - length ys) ' ' ++ ys
       where ys = take m xs
 
-
-getLineUntilQ :: IO String
-getLineUntilQ = do c <- getChar
-                   case toLower c of
-                     'q'  -> putStrLn "" >> exitSuccess
-                     '\n' -> return [c]
-                     x    -> do xs <- getLineUntilQ
-                                return (x:xs)
-
 getNumbers :: Int -> IO [Int]
-getNumbers l = do ss <- fmap words getLineUntilQ
-                  if all (all isDigit) ss
-                     then do let ns = map read ss
-                             if all (<l) ns
-                                then return ns
-                                else do putStr "One or more of your entries are out of range - Try again: "
-                                        getNumbers l
-                     else do putStr "Parse error - Try again: "
-                             getNumbers l
+getNumbers l = do ss <- words <$> getLine
+                  if | all (all isDigit) ss               -> do let ns = map read ss
+                                                                if all (<l) ns
+                                                                  then return ns
+                                                                  else do putStr "One or more of your entries are out of range - Try again: "
+                                                                          getNumbers l
+                     | any (\x -> map toLower x == "q") ss -> exitSuccess
+                     | otherwise                           -> do putStr "Parse error - Try again: "
+                                                                 getNumbers l
 
 nubsort :: Ord a => [a] -> [a]
 nubsort = map head . group . sort
@@ -162,7 +150,7 @@ getDate s | all isDigit s = Just $ daysAhead (read s)
                                return . daysAhead $ (w + 7 - w') `mod` 7
 
 today :: Day
-today = utctDay $ unsafePerformIO getCurrentTime
+today = unsafePerformIO (utctDay <$> getCurrentTime)
 
 daysAhead :: Int -> (Int,Int)
 daysAhead n = (\(_,m,d) -> (d,m)) . toGregorian $ addDays (fromIntegral n) today
@@ -179,7 +167,6 @@ weekday _ = Nothing
 
 --------------------------------------
 
-
 toTime24 :: Int -> (Int,Int)
 toTime24 = flip divMod 60
 
@@ -188,53 +175,57 @@ fromTime24 (h,m) | h == 0    = 1440 + m
                  | otherwise = h * 60 + m
 
 showTime24 :: (Int,Int) -> Text
-showTime24 (h,m) = (if h < 10 then T.cons '1' else id) (T.pack (show h)) `T.append` ":" `T.append` (if m < 10 then T.cons '1' else id) (T.pack (show m))
+showTime24 (h,m) = (if h < 10 then T.cons '0' else id) (T.pack (show h)) `T.append` ":" `T.append` (if m < 10 then T.cons '0' else id) (T.pack (show m))
 
-adjacents :: [a] -> [(a,a)]
-adjacents xs = zip xs (tail xs)
-
-intervals :: [(Text,Int,Int)] -> [Int]
-intervals ss = zipWith (subtract) ls . map (uncurry subtract) $ adjacents ts
-  where
-    (_,ls,ts) = unzip3 ss
-
-
-intervalsEnd :: [(Text,Int,Int)] -> ([Int],Int)
-intervalsEnd ss = (zipWith (subtract) ls . map (uncurry subtract) $ adjacents ts, lastDuration + lastTime)
-  where
-    (_,ls,ts) = unzip3 ss
-    (_,lastDuration,lastTime) = last ss
-
-valid :: [(Text,Int,Int)] -> Bool
-valid = all (>=0) . intervals
-
-interleave :: [a] -> [a] -> [a]
-interleave    []     []  = []
-interleave (x:xs) (y:ys) = x : y : interleave xs ys
+printMinutes :: Int -> IO ()
+printMinutes m = do putStr (show m)
+                    putStr " minute"
+                    unless (m == 1) (putStr "s")
 
 -- scheduling
 
-schedule :: [Film] -> ([[(Text,(Int,Int))]],[([Int],Int)])
-schedule fs = (map (map (\(x,_,z) -> (x,toTime24 z))) vs, map intervalsEnd vs)
+type Film   = (Text,Int,[(Int,Int)])
+type Option = [(Text, Int, (Int,Int))]
+
+adjacents :: [a] -> [(a,a)]
+adjacents = zip <*> tail
+
+schedule :: [Film] -> [Option]
+schedule fs = (sortBy (flip (comparing (sum . intervals))) . filter chronological . map (sortOn (\(_,_,z) -> fromTime24 z) . zip3 ts ls)) (sequence ss)
   where
     (ts,ls,ss) = unzip3 fs
 
-    vs :: [[(Text, Int, Int)]]
-    vs = sortBy (comparing (Down . sum . intervals)) . filter valid . map (sortBy (comparing (\(_,_,x) -> x)) . zip3 ts ls . map fromTime24) $ sequence ss
+intervals :: Option -> [Int]
+intervals o = go ls (adjacents (map fromTime24 ts))
+  where
+    (_,ls,ts) = unzip3 o
+
+    go _      []           = []
+    go (l:ls) ((t1,t2):ts) = t2 - t1 - l : go ls ts
+
+chronological :: Option -> Bool
+chronological = all (>= 0) . intervals
 
 -- IO
 
-prettyPrint :: [[(Text,(Int,Int))]] -> [([Int],Int)] -> IO ()
-prettyPrint ss = T.putStrLn . T.intercalate "\n\n\n" . map showOption . zip ss
-
-showOption :: ([(Text,(Int,Int))],([Int],Int)) -> Text
-showOption (xs,times) = T.intercalate "\n" $ interleave (map showFilm xs) (showIntervals times)
+printOption :: Int -> Option -> IO ()
+printOption p o = do putStr "  Total interval duration: "
+                     printMinutes (sum (intervals o))
+                     putChar '\n'
+                     go o
   where
-    showFilm (f,(h,m)) = "  " `T.append` spad f `T.append` tpad h `T.append` ":" `T.append` tpad m
-    tpad x = if x < 10 then '0' `T.cons` T.pack (show x) else T.pack (show x)
-    spad f = f `T.append` ": " `T.append` T.replicate (l - T.length f) " "
-    l = maximum $ map (T.length . fst) xs
-
-    showIntervals :: ([Int],Int) -> [Text]
-    showIntervals ([],et)     = ["  \ESC[1;32m" `T.append` "ends at " `T.append` showTime24 (toTime24 et) `T.append` "\ESC[0m"]
-    showIntervals ((t:ts),et) = ("  \ESC[1;32m" `T.append` T.pack (show t) `T.append` " minute interval\ESC[0m") : showIntervals (ts,et)
+    go []           = pure ()
+    go ((n,l,t):os) = do T.putStr "    "
+                         T.putStr n
+                         T.putStr ": "
+                         T.putStr (T.replicate (p - T.length n) " ")
+                         T.putStr (showTime24 t)
+                         T.putStr " \ESC[1;32m(end time: "
+                         let endTime = l + fromTime24 t
+                         T.putStr (showTime24 (toTime24 endTime))
+                         case os of
+                           []         -> pure ()
+                           (_,_,t'):_ -> do T.putStr ", interval duration: "
+                                            printMinutes (fromTime24 t' - endTime)
+                         T.putStrLn ")\ESC[0m"
+                         go os
