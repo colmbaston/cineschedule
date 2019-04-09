@@ -77,7 +77,7 @@ refresh f d c s = do putStrLn s
                        Right fs -> filmHandler (unpack c) d fs >> exitSuccess
 
 download :: FilePath -> IO ()
-download f = callProcess "wget" ["-q","--show-progress","-O",f,url]
+download f = callProcess "wget" ["-q", "--show-progress", "-O", f, url]
 
 filmHandler :: String -> (Int,Int) -> [Film] -> IO ()
 filmHandler c (d,m) fs = do let l  = length fs
@@ -191,20 +191,20 @@ adjacents :: [a] -> [(a,a)]
 adjacents = zip <*> tail
 
 schedule :: [Film] -> [Option]
-schedule fs = (sortBy (flip (comparing (sum . intervals))) . filter chronological . map (sortOn (\(_,_,z) -> fromTime24 z) . zip3 ts ls)) (sequence ss)
+schedule fs = (map fst . sortBy (flip (comparing (sum . snd))) . filter (all (>= 0) . snd)) (zip os iss)
   where
     (ts,ls,ss) = unzip3 fs
 
+    os :: [Option]
+    os = map (sortOn (\(_,_,z) -> fromTime24 z) . zip3 ts ls) (sequence ss)
+
+    iss :: [[Int]]
+    iss = map intervals os
+
 intervals :: Option -> [Int]
-intervals o = go ls (adjacents (map fromTime24 ts))
+intervals o = zipWith (\l (t1,t2) -> t2 - t1 - l) ls (adjacents (map fromTime24 ts))
   where
     (_,ls,ts) = unzip3 o
-
-    go _      []           = []
-    go (l:ls) ((t1,t2):ts) = t2 - t1 - l : go ls ts
-
-chronological :: Option -> Bool
-chronological = all (>= 0) . intervals
 
 -- IO
 
