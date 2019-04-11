@@ -168,7 +168,9 @@ weekday _ = Nothing
 --------------------------------------
 
 toTime24 :: Int -> (Int,Int)
-toTime24 = flip divMod 60
+toTime24 n = (h `mod` 24, m)
+  where
+    (h,m) = divMod n 60
 
 fromTime24 :: (Int,Int) -> Int
 fromTime24 (h,m) | h == 0    = 1440 + m
