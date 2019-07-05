@@ -21,7 +21,6 @@ import Data.Ord
 
 import System.IO
 import System.Directory
-import System.IO.Unsafe
 import System.Exit
 import System.Process
 

@@ -4,15 +4,13 @@ module Parser (runParser) where
 
 import Data.Attoparsec.Text
 
-import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
+import           Data.Text (Text)
 
-import Data.Maybe    (catMaybes)
-import Data.List     (break,find,sortBy,groupBy)
-import Data.Char     (toLower)
-import Data.Ord      (comparing)
-import Data.Function (on)
+import Data.List
+import Data.Char
+import Data.Ord
+import Data.Function
 
 type Film = (Text,Int,[(Int,Int)])
 
