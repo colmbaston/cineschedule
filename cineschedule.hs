@@ -10,6 +10,7 @@ import qualified Data.Text.IO as T
 import Control.Monad
 
 import Data.Time.Clock
+import Data.Time.LocalTime
 import Data.Time.Calendar
 import Data.Time.Calendar.WeekDate
 
@@ -37,8 +38,10 @@ main = do hSetBuffering stdout NoBuffering
           putStrLn ""
           (mc,md,r) <- getArgs >>= validateArgs (Nothing,Nothing,False)
 
+          today <- getToday
+
           d <- case md of
-                 Nothing -> T.putStrLn ("No day option provided - defaulting to " `T.append` defaultDay `T.append` "...") >> return (fromJust . getDate $ unpack defaultDay)
+                 Nothing -> T.putStrLn ("No day option provided - defaulting to " `T.append` defaultDay `T.append` "...") >> return (fromJust (getDate (unpack defaultDay) today))
                  Just  d -> return d
 
           c <- case mc of
@@ -123,17 +126,6 @@ select = go 0
 
 -- ARGUMENT HANDLING --
 
-validateArgs :: (Maybe Text,Maybe (Int,Int),Bool) -> [String] -> IO (Maybe Text,Maybe (Int,Int),Bool)
-validateArgs p [] = return p
-validateArgs (mc,md,False)  ("-r":xs)   = validateArgs (mc,md,True) xs
-validateArgs (Nothing,md,b) ("-c":x:xs) = validateArgs (Just $ pack x,md,b) xs
-validateArgs (mc,Nothing,b) ("-d":x:xs) = case getDate (map toLower x) of
-                                            Nothing -> usageFail
-                                            jd      -> validateArgs (mc,jd,b) xs
-validateArgs _ _ = usageFail
-
-usageFail :: IO a
-usageFail = putStrLn "Usage: cineschedule [-d day] [-c cinema]" >> exitFailure
 
 defaultCinema :: Text
 defaultCinema = "Nottingham"
@@ -141,19 +133,35 @@ defaultCinema = "Nottingham"
 defaultDay :: Text
 defaultDay = "today"
 
-getDate :: String -> Maybe (Int,Int)
-getDate "today"    = getDate "0"
-getDate "tomorrow" = getDate "1"
-getDate s | all isDigit s = Just $ daysAhead (read s)
-          | otherwise     = do w <- weekday s
-                               let (_,_,w') = toWeekDate today
-                               return . daysAhead $ (w + 7 - w') `mod` 7
+validateArgs :: (Maybe Text,Maybe (Int,Int),Bool) -> [String] -> IO (Maybe Text,Maybe (Int,Int),Bool)
+validateArgs p [] = return p
+validateArgs (mc,md,False)  ("-r":xs)   = validateArgs (mc,md,True) xs
+validateArgs (Nothing,md,b) ("-c":x:xs) = validateArgs (Just $ pack x,md,b) xs
+validateArgs (mc,Nothing,b) ("-d":x:xs) = do d <- getToday
+                                             case getDate (map toLower x) d of
+                                               Nothing -> usageFail
+                                               jd      -> validateArgs (mc,jd,b) xs
+validateArgs _ _ = usageFail
 
-today :: Day
-today = unsafePerformIO (utctDay <$> getCurrentTime)
+getToday :: IO Day
+getToday = adjust <$> getCurrentTimeZone <*> getCurrentTime
+  where
+    adjust :: TimeZone -> UTCTime -> Day
+    adjust z = utctDay . addUTCTime (fromIntegral (timeZoneMinutes z) * 60)
 
-daysAhead :: Int -> (Int,Int)
-daysAhead n = (\(_,m,d) -> (d,m)) . toGregorian $ addDays (fromIntegral n) today
+getDate :: String -> Day -> Maybe (Int,Int)
+getDate "today"    d = getDate "0" d
+getDate "tomorrow" d = getDate "1" d
+getDate s d | all isDigit s = Just $ daysAhead (read s) d
+            | otherwise     = do w <- weekday s
+                                 let (_,_,w') = toWeekDate d
+                                 pure (daysAhead ((w + 7 - w') `mod` 7) d)
+
+daysAhead :: Int -> Day -> (Int,Int)
+daysAhead n today = (\(_,m,d) -> (d,m)) . toGregorian $ addDays (fromIntegral n) today
+
+usageFail :: IO a
+usageFail = putStrLn "Usage: cineschedule [-d day] [-c cinema]" >> exitFailure
 
 weekday :: String -> Maybe Int
 weekday "monday"    = Just 1
@@ -182,7 +190,7 @@ showTime24 (h,m) = (if h < 10 then T.cons '0' else id) (T.pack (show h)) `T.appe
 printMinutes :: Int -> IO ()
 printMinutes m = do putStr (show m)
                     putStr " minute"
-                    unless (m == 1) (putStr "s")
+                    unless (m == 1) (putChar 's')
 
 -- scheduling
 
