@@ -29,7 +29,7 @@ import Parser
 -- MAIN --
 
 url :: String
-url = "www.cineworld.co.uk/syndication/all-performances.xml"
+url = "https://www.cineworld.co.uk/syndication/all-performances.xml"
 
 main :: IO ()
 main = do hSetBuffering stdout NoBuffering
