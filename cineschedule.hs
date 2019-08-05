@@ -160,7 +160,7 @@ daysAhead :: Int -> Day -> (Int,Int)
 daysAhead n today = (\(_,m,d) -> (d,m)) . toGregorian $ addDays (fromIntegral n) today
 
 usageFail :: IO a
-usageFail = putStrLn "Usage: cineschedule [-d day] [-c cinema]" >> exitFailure
+usageFail = putStrLn "Usage: cineschedule [-c cinema] [-d day] [-r]" >> exitFailure
 
 weekday :: String -> Maybe Int
 weekday "monday"    = Just 1
