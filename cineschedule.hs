@@ -24,6 +24,8 @@ import System.Directory
 import System.Exit
 import System.Process
 
+import System.Console.Haskeline
+
 import Parser
 
 -- MAIN --
@@ -33,7 +35,6 @@ url = "https://www.cineworld.co.uk/syndication/all-performances.xml"
 
 main :: IO ()
 main = do hSetBuffering stdout NoBuffering
-          hSetBuffering stdin  NoBuffering
           putStrLn ""
           (mc,md,r) <- getArgs >>= validateArgs (Nothing,Nothing,False)
 
@@ -60,10 +61,10 @@ main = do hSetBuffering stdout NoBuffering
           putStrLn "Parsing file..."
           t <- T.readFile absFile
           case runParser d c t of
-            Left err -> refresh absFile d c $ "Parse error - \"" ++ err ++ "\" - Refreshing file..."
-            Right [] -> refresh absFile d c $ "No films found - Refreshing file..."
+            Left err -> refresh absFile d c ("Parse error - \"" ++ err ++ "\" - Refreshing file...")
+            Right [] -> refresh absFile d c "No films found - Refreshing file..."
             Right fs -> if length fs < 10
-                           then refresh absFile d c $ "Fewer than 10 films found - Refreshing file..."
+                           then refresh absFile d c "Fewer than 10 films found - Refreshing file..."
                            else filmHandler (unpack c) d fs
 
 refresh :: FilePath -> (Int,Int) -> Text -> String -> IO ()
@@ -75,7 +76,7 @@ refresh f d c s = do putStrLn s
                      t <- T.readFile f
                      case runParser d c t of
                        Left err -> putStrLn ("Parse error - \"" ++ err ++ "\" - The file format may have changed!\n") >> exitFailure
-                       Right [] -> putStrLn ("No films found - Did you enter the correct arguments?\n")               >> exitFailure
+                       Right [] -> putStrLn  "No films found - Did you enter the correct arguments?\n"             >> exitFailure
                        Right fs -> filmHandler (unpack c) d fs >> exitSuccess
 
 download :: FilePath -> IO ()
@@ -90,7 +91,7 @@ filmHandler c (d,m) fs = do let l  = length fs
                             mapM_ (\(n,f) -> putStr (lpad (length (show l) + 1) (show n) ++ ": ") >> T.putStrLn f) ll
                             putStrLn ""
                             putStr "Enter the values of the films that you wish to schedule (space separated, press 'q' to exit): "
-                            ns <- fmap nubsort $ getNumbers l
+                            ns <- nubsort <$> getNumbers l
                             case schedule (select ns fs) of
                                [] -> putStrLn "No possible schedulings!"
                                os -> do let (ns,_,_) = unzip3 (head os)
@@ -103,15 +104,18 @@ filmHandler c (d,m) fs = do let l  = length fs
       where ys = take m xs
 
 getNumbers :: Int -> IO [Int]
-getNumbers l = do ss <- words <$> getLine
-                  if | all (all isDigit) ss               -> do let ns = map read ss
-                                                                if all (<l) ns
-                                                                  then return ns
-                                                                  else do putStr "One or more of your entries are out of range - Try again: "
-                                                                          getNumbers l
-                     | any (\x -> map toLower x == "q") ss -> exitSuccess
-                     | otherwise                           -> do putStr "Parse error - Try again: "
-                                                                 getNumbers l
+getNumbers l = do mss <- fmap words <$> runInputT (Settings noCompletion Nothing False) (getInputLine "")
+                  case mss of
+                    Nothing -> do putStr "Input error - Try again: "
+                                  getNumbers l
+                    Just ss -> if | all (all isDigit) ss               -> do let ns = map read ss
+                                                                             if all (<l) ns
+                                                                               then return ns
+                                                                               else do putStr "One or more of your entries are out of range - Try again: "
+                                                                                       getNumbers l
+                                  | any (\x -> map toLower x == "q") ss ->    exitSuccess
+                                  | otherwise                           -> do putStr "Parse error - Try again: "
+                                                                              getNumbers l
 
 nubsort :: Ord a => [a] -> [a]
 nubsort = map head . group . sort
