@@ -1,0 +1,21 @@
+cabal-version:       >= 1.10
+
+name:                cineschedule
+version:             0.1.0.0
+license-file:        LICENCE
+author:              Colm Baston
+maintainer:          colm@colmbaston.uk
+build-type:          Simple
+extra-source-files:  README.md
+
+executable cineschedule
+  main-is:           cineschedule.hs
+  other-modules:     Parser
+  default-language:  Haskell2010
+  build-depends:     base >= 4.14 && < 4.15,
+                     attoparsec,
+                     text,
+                     directory,
+                     process,
+                     haskeline,
+                     time
