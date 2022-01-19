@@ -20,6 +20,6 @@ Setting `-r` will force-refresh the locally-cached copy of the XML file.
 
 ## Notes
 
-* Highly-anticipated new releases and exclusive screenings for Cineworld Unlimited card-holders can be scheduled weeks in advance, but the majority of showings are scheduled only a few days in advance.
+* Highly-anticipated new releases and exclusive screenings for Cineworld Unlimited card-holders may be scheduled weeks in advance, but the majority of showings are scheduled only a few days in advance.
 * The locally-cached copy of the XML file will be automatically refreshed if there are fewer than 10 films found to ensure it's up-to-date.
-* For most screenings, the displayed showtime is actually the start of 20-30 minutes of adverts and trailers that are shown before the film begins. For this reason, the end time that is displayed is not precise, and will be earlier than the film's actual finish. The interval durations should be fairly accurate, however.
+* For most screenings, the displayed showtime is actually the start of 20-30 minutes of adverts and trailers that are shown before the film begins. For this reason, the end time that is displayed is not precise, and will be earlier than the film's actual finish. The interval durations should be reasonably reliable, however.

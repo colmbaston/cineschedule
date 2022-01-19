@@ -204,7 +204,7 @@ adjacents :: [a] -> [(a,a)]
 adjacents = zip <*> tail
 
 schedule :: [Film] -> [Option]
-schedule fs = (map fst . sortBy (flip (comparing (sum . snd))) . filter (all (>= 0) . snd)) (zip os iss)
+schedule fs = (map fst . sortOn (Down . sum . snd) . filter (all (>= 0) . snd)) (zip os iss)
   where
     (ts,ls,ss) = unzip3 fs
 
